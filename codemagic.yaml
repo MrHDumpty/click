@@ -20,7 +20,6 @@ workflows:
         script: | 
           flutter pub get
       
-      # --- FINAL AND MOST AGGRESSIVE FIX ---
       - name: Prepare iOS Podfile
         script: | 
           set -e # Exit immediately if a command fails
@@ -30,21 +29,26 @@ workflows:
           cat $PODFILE_PATH
           echo "-----------------------------------"
 
-          # Use a Ruby script to perform multiple, reliable edits.
+          # Use a Ruby script to configure the Podfile for modern Firebase SDKs.
           ruby -e "
           content = File.read('$PODFILE_PATH')
 
-          # 1. Set platform to iOS 13.0
-          content.gsub!(/# platform :ios, '12.0'/, 'platform :ios, \\'13.0\\'')
-          content.gsub!(/# platform :ios, '11.0'/, 'platform :ios, \\'13.0\\'') # Also catch 11.0
+          # 1. Set platform to iOS 13.0.
+          content.gsub!(/# platform :ios, '11.0'/, \"platform :ios, '13.0'\")
+          content.gsub!(/# platform :ios, '12.0'/, \"platform :ios, '13.0'\")
 
-          # 2. THE KEY FIX: Comment out use_frameworks! if it exists.
-          content.gsub!(/use_frameworks!/, '# use_frameworks!')
+          # 2. Comment out `use_frameworks!`. This is required to fix the initial
+          #    'non-modular header' errors with Firebase's Objective-C pods.
+          content.gsub!(/^\s*use_frameworks!/, '# use_frameworks!')
 
-          # 3. As a safeguard, ensure the CLANG setting is in the post_install hook.
-          post_install_hook = 'post_install do |installer|'
-          clang_setting = \"  installer.pods_project.targets.each do |target|\\n    flutter_additional_ios_build_settings(target)\\n    target.build_configurations.each do |config|\\n      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'\\n    end\\n  end\"
-          content.gsub!(/post_install do \|installer\|/, \"#{post_install_hook}\\n#{clang_setting}\")
+          # 3. Add `use_modular_headers!`. This is required to fix the secondary
+          #    'static library integration' error with Firebase's Swift pods.
+          #    We will insert it into the main target block.
+          target_line = 'target \\'Runner\\' do'
+          modular_headers_line = '  use_modular_headers!'
+          unless content.include?(modular_headers_line)
+            content.gsub!(/#{target_line}/, \"#{target_line}\\n#{modular_headers_line}\")
+          end
           
           File.write('$PODFILE_PATH', content)
           "
@@ -56,7 +60,7 @@ workflows:
       - name: Install CocoaPods dependencies
         script: | 
           cd ios
-          # Force a de-integration and re-integration of pods to be safe
+          # A full deintegrate and repo-update ensures a clean build from the modified Podfile.
           pod deintegrate
           pod install --repo-update
 
