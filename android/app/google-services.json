@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "190437215571",
+    "project_id": "bingusco",
+    "storage_bucket": "bingusco.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:190437215571:android:1ef7420776df511adba5a6",
+        "android_client_info": {
+          "package_name": "com.mrhdumpty.clickclickclick"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBx6dtMYYNJBddGkbqdGuZ5ZxSMOp1384E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
