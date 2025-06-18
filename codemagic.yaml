@@ -1,5 +1,33 @@
+# codemagic.yaml
 workflows:
-  sample-workflow:
-    name: Codemagic Sample Workflow
-    max_build_duration: 120
-    instance_type: mac_mini_m1
+  build-flutter-ios-app:
+    name: Build Flutter iOS App
+    instance_type: macos_latest # iOS builds must run on a macOS machine
+    max_build_duration: 60 # Optional: sets a 60-minute timeout
+
+    environment:
+      flutter: stable # Or specify a version, e.g., 3.19.6
+      xcode: latest # Or specify a version, e.g., 15.3
+      cocoapods: default
+
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache # Cache Flutter packages
+        - $FCI_BUILD_DIR/ios/Pods # Cache CocoaPods
+
+    scripts:
+      - name: Get Flutter dependencies
+        script: | 
+          flutter pub get
+      
+      - name: Install CocoaPods dependencies
+        script: | 
+          cd ios
+          pod install
+
+      - name: Build Flutter iOS app
+        script: | 
+          flutter build ios --no-codesign # Creates the .app file without signing
+          
+    artifacts:
+      - build/ios/iphoneos/Runner.app # The path to the generated .app bundle
