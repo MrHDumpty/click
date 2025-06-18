@@ -2,24 +2,32 @@
 workflows:
   build-flutter-ios-app:
     name: Build Flutter iOS App
-    instance_type: mac_mini_m2 # iOS builds must run on a macOS machine
-    max_build_duration: 60 # Optional: sets a 60-minute timeout
+    instance_type: mac_mini_m2
+    max_build_duration: 60
 
     environment:
-      flutter: stable # Or specify a version, e.g., 3.19.6
-      xcode: latest # Or specify a version, e.g., 15.3
+      flutter: stable
+      xcode: latest
       cocoapods: default
 
     cache:
       cache_paths:
-        - $HOME/.pub-cache # Cache Flutter packages
-        - $FCI_BUILD_DIR/ios/Pods # Cache CocoaPods
+        - $HOME/.pub-cache
+        - $FCI_BUILD_DIR/ios/Pods
 
     scripts:
       - name: Get Flutter dependencies
         script: | 
           flutter pub get
       
+      # --- FIX IS HERE ---
+      - name: Set iOS deployment target
+        script: | 
+          # This command finds the commented-out platform line in the Podfile
+          # and replaces it with an uncommented line setting the platform to iOS 13.0.
+          # This is necessary for modern Firebase SDKs.
+          sed -i.bak "s/# platform :ios, '12.0'/platform :ios, '13.0'/" ios/Podfile
+          
       - name: Install CocoaPods dependencies
         script: | 
           cd ios
@@ -27,7 +35,7 @@ workflows:
 
       - name: Build Flutter iOS app
         script: | 
-          flutter build ios --no-codesign # Creates the .app file without signing
+          flutter build ios --no-codesign
           
     artifacts:
-      - build/ios/iphoneos/Runner.app # The path to the generated .app bundle
+      - build/ios/iphoneos/Runner.app
