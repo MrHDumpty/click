@@ -2,7 +2,7 @@
 workflows:
   build-flutter-ios-app:
     name: Build Flutter iOS App
-    instance_type: macos_latest # iOS builds must run on a macOS machine
+    instance_type: mac_mini_m2 # iOS builds must run on a macOS machine
     max_build_duration: 60 # Optional: sets a 60-minute timeout
 
     environment:
