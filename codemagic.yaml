@@ -20,26 +20,25 @@ workflows:
         script: | 
           flutter pub get
       
-      # --- FINAL FIX IS HERE ---
-      - name: Modify Podfile for modern SDKs
+      # --- FINAL COMBINED FIX IS HERE ---
+      - name: Modify Podfile for modern iOS builds
         script: | 
-          # 1. Set the iOS platform version. Simple sed is fine for this.
+          # 1. Set the iOS platform version to 13.0 for modern SDKs like Firebase.
           sed -i.bak "s/# platform :ios, '12.0'/platform :ios, '13.0'/" ios/Podfile
 
-          # 2. Use Ruby to robustly add build settings to the existing post_install hook.
-          # This avoids sed's cross-platform syntax issues and is much more reliable.
-          # It reads the Podfile, finds the line with 'flutter_additional_ios_build_settings',
-          # and inserts our fix on the next line.
+          # 2. Add `use_modular_headers!` to the Podfile. This is the standard solution
+          #    for non-modular header errors with Firebase and `use_frameworks!`.
+          #    It inserts the line directly after `use_frameworks!`.
           ruby -e "
           podfile_path = 'ios/Podfile'
           lines = File.readlines(podfile_path)
-          target_line_index = lines.find_index { |line| line.include?('flutter_additional_ios_build_settings(target)') }
+          target_line_index = lines.find_index { |line| line.strip.start_with?('use_frameworks!') }
           if target_line_index
-            lines.insert(target_line_index + 1, \"    target.build_configurations.each do |config|\\n      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'\\n    end\\n\")
+            lines.insert(target_line_index + 1, \"  use_modular_headers!\\n\")
             File.write(podfile_path, lines.join)
-            puts 'Successfully injected build setting to Podfile.'
+            puts 'Successfully injected use_modular_headers! to Podfile.'
           else
-            puts 'Warning: Could not find target line in Podfile to inject build setting.'
+            puts 'Warning: Could not find use_frameworks! in Podfile to inject modular headers.'
           end
           "
           
@@ -50,6 +49,8 @@ workflows:
 
       - name: Build Flutter iOS app
         script: | 
+          # You might need to clean before building after a Podfile change
+          flutter clean
           flutter build ios --no-codesign
           
     artifacts:
