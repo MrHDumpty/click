@@ -3,7 +3,7 @@ workflows:
   build-flutter-ios-app:
     name: Build Flutter iOS App
     instance_type: mac_mini_m2
-    max_build_duration: 60
+    max_build_duration: 90 # Increased timeout just in case
 
     environment:
       flutter: stable
@@ -20,37 +20,48 @@ workflows:
         script: | 
           flutter pub get
       
-      # --- FINAL COMBINED FIX IS HERE ---
-      - name: Modify Podfile for modern iOS builds
+      # --- FINAL AND MOST AGGRESSIVE FIX ---
+      - name: Prepare iOS Podfile
         script: | 
-          # 1. Set the iOS platform version to 13.0 for modern SDKs like Firebase.
-          sed -i.bak "s/# platform :ios, '12.0'/platform :ios, '13.0'/" ios/Podfile
+          set -e # Exit immediately if a command fails
+          PODFILE_PATH="ios/Podfile"
 
-          # 2. Add `use_modular_headers!` to the Podfile. This is the standard solution
-          #    for non-modular header errors with Firebase and `use_frameworks!`.
-          #    It inserts the line directly after `use_frameworks!`.
+          echo "--- Podfile before modification ---"
+          cat $PODFILE_PATH
+          echo "-----------------------------------"
+
+          # Use a Ruby script to perform multiple, reliable edits.
           ruby -e "
-          podfile_path = 'ios/Podfile'
-          lines = File.readlines(podfile_path)
-          target_line_index = lines.find_index { |line| line.strip.start_with?('use_frameworks!') }
-          if target_line_index
-            lines.insert(target_line_index + 1, \"  use_modular_headers!\\n\")
-            File.write(podfile_path, lines.join)
-            puts 'Successfully injected use_modular_headers! to Podfile.'
-          else
-            puts 'Warning: Could not find use_frameworks! in Podfile to inject modular headers.'
-          end
-          "
+          content = File.read('$PODFILE_PATH')
+
+          # 1. Set platform to iOS 13.0
+          content.gsub!(/# platform :ios, '12.0'/, 'platform :ios, \\'13.0\\'')
+          content.gsub!(/# platform :ios, '11.0'/, 'platform :ios, \\'13.0\\'') # Also catch 11.0
+
+          # 2. THE KEY FIX: Comment out use_frameworks! if it exists.
+          content.gsub!(/use_frameworks!/, '# use_frameworks!')
+
+          # 3. As a safeguard, ensure the CLANG setting is in the post_install hook.
+          post_install_hook = 'post_install do |installer|'
+          clang_setting = \"  installer.pods_project.targets.each do |target|\\n    flutter_additional_ios_build_settings(target)\\n    target.build_configurations.each do |config|\\n      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'\\n    end\\n  end\"
+          content.gsub!(/post_install do \|installer\|/, \"#{post_install_hook}\\n#{clang_setting}\")
           
+          File.write('$PODFILE_PATH', content)
+          "
+
+          echo "--- Podfile after modification ---"
+          cat $PODFILE_PATH
+          echo "----------------------------------"
+
       - name: Install CocoaPods dependencies
         script: | 
           cd ios
-          pod install
+          # Force a de-integration and re-integration of pods to be safe
+          pod deintegrate
+          pod install --repo-update
 
       - name: Build Flutter iOS app
         script: | 
-          # You might need to clean before building after a Podfile change
-          flutter clean
           flutter build ios --no-codesign
           
     artifacts:
