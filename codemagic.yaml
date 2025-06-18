@@ -20,19 +20,28 @@ workflows:
         script: | 
           flutter pub get
       
-      # --- COMBINED FIX IS HERE ---
+      # --- FINAL FIX IS HERE ---
       - name: Modify Podfile for modern SDKs
         script: | 
-          # 1. Set the iOS platform version to 13.0 for modern SDKs like Firebase.
+          # 1. Set the iOS platform version. Simple sed is fine for this.
           sed -i.bak "s/# platform :ios, '12.0'/platform :ios, '13.0'/" ios/Podfile
 
-          # 2. Add fix for non-modular header issue INSIDE the existing post_install hook.
-          # This finds the line 'flutter_additional_ios_build_settings(target)' and appends
-          # the necessary build setting change right after it.
-          sed -i.bak "/flutter_additional_ios_build_settings(target)/a \
-            target.build_configurations.each do |config|\\\
-              config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'\\\
-            end" ios/Podfile
+          # 2. Use Ruby to robustly add build settings to the existing post_install hook.
+          # This avoids sed's cross-platform syntax issues and is much more reliable.
+          # It reads the Podfile, finds the line with 'flutter_additional_ios_build_settings',
+          # and inserts our fix on the next line.
+          ruby -e "
+          podfile_path = 'ios/Podfile'
+          lines = File.readlines(podfile_path)
+          target_line_index = lines.find_index { |line| line.include?('flutter_additional_ios_build_settings(target)') }
+          if target_line_index
+            lines.insert(target_line_index + 1, \"    target.build_configurations.each do |config|\\n      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'\\n    end\\n\")
+            File.write(podfile_path, lines.join)
+            puts 'Successfully injected build setting to Podfile.'
+          else
+            puts 'Warning: Could not find target line in Podfile to inject build setting.'
+          end
+          "
           
       - name: Install CocoaPods dependencies
         script: | 
